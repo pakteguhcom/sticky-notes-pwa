@@ -156,12 +156,16 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // Serve static files from public directory with cache headers
+// Note: Static file serving is not rate-limited here as it's typically handled
+// at the CDN/infrastructure level (Netlify). Files are cached with maxAge: 1d
+// and etag headers to minimize file system access.
 app.use(express.static(join(__dirname, '..', 'public'), {
   maxAge: '1d',
   etag: true
 }));
 
 // Catch-all route for SPA (serve index.html for all non-API routes)
+// This route excludes /api/* paths to prevent serving index.html for API endpoints
 app.get(/^(?!\/api\/).*/, (req, res) => {
   res.sendFile(join(__dirname, '..', 'public', 'index.html'));
 });
