@@ -5,6 +5,11 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { createClient } from '@libsql/client';
 import { nanoid } from 'nanoid';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Env requirements
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -140,6 +145,14 @@ app.post('/api/admin/login', (req, res) => {
 
   const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
   res.json({ token });
+});
+
+// Serve static files from public directory
+app.use(express.static(join(__dirname, '..', 'public')));
+
+// Catch-all route for SPA (serve index.html for all non-API routes)
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, '..', 'public', 'index.html'));
 });
 
 export default app;
