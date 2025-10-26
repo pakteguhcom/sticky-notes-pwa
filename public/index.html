@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sticky Notes PWA</title>
+  <meta name="description" content="Aplikasi catatan sticky modern, responsif, dan installable sebagai PWA.">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .note {
+      min-height: 150px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .note:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+    }
+    .note-content {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+  <div class="container mx-auto px-4 py-8 max-w-6xl">
+    <!-- Header -->
+    <header class="text-center mb-12">
+      <h1 class="text-5xl font-bold text-indigo-900 mb-3">📝 Sticky Notes PWA</h1>
+      <p class="text-gray-600 text-lg">Buat catatan, bagikan ide, kelola bersama!</p>
+    </header>
+
+    <!-- Admin Login/Logout -->
+    <div class="mb-8 flex justify-center" id="adminSection">
+      <div id="loginForm" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-semibold mb-4 text-gray-800">Login Admin</h2>
+        <input type="password" id="adminPassword" placeholder="Password Admin" 
+               class="w-full px-4 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <button onclick="adminLogin()" 
+                class="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
+          Masuk
+        </button>
+        <p id="loginError" class="text-red-600 mt-2 text-sm"></p>
+      </div>
+      <div id="loggedInInfo" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md hidden">
+        <h2 class="text-2xl font-semibold mb-4 text-gray-800">Admin Mode</h2>
+        <p class="text-gray-600 mb-4">Anda sedang login sebagai Admin. Anda bisa mengedit dan menghapus catatan.</p>
+        <button onclick="adminLogout()" 
+                class="w-full bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition font-semibold">
+          Logout
+        </button>
+      </div>
+    </div>
+
+    <!-- Create Note Form -->
+    <div class="mb-10 bg-white p-8 rounded-lg shadow-lg">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800">Buat Catatan Baru</h2>
+      <textarea id="noteContent" placeholder="Tulis catatan Anda di sini..." 
+                class="w-full px-4 py-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 h-32"></textarea>
+      <div class="flex items-center gap-4 flex-wrap">
+        <label class="flex items-center gap-2">
+          <span class="text-gray-700 font-medium">Warna:</span>
+          <input type="color" id="noteColor" value="#FDE68A" 
+                 class="w-16 h-10 border rounded cursor-pointer">
+        </label>
+        <button onclick="createNote()" 
+                class="flex-1 min-w-[200px] bg-indigo-600 text-white px-8 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
+          Tambah Catatan
+        </button>
+      </div>
+      <p id="createError" class="text-red-600 mt-2 text-sm"></p>
+    </div>
+
+    <!-- Notes Grid -->
+    <div id="notesContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Notes will be dynamically inserted here -->
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="text-center text-gray-600 mt-8">
+      <p>Memuat catatan...</p>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl p-8">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800">Edit Catatan</h2>
+      <textarea id="editContent" 
+                class="w-full px-4 py-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 h-40"></textarea>
+      <div class="flex items-center gap-4 mb-4">
+        <label class="flex items-center gap-2">
+          <span class="text-gray-700 font-medium">Warna:</span>
+          <input type="color" id="editColor" 
+                 class="w-16 h-10 border rounded cursor-pointer">
+        </label>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="saveEdit()" 
+                class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
+          Simpan
+        </button>
+        <button onclick="closeEditModal()" 
+                class="flex-1 bg-gray-400 text-white px-6 py-3 rounded-lg hover:bg-gray-500 transition font-semibold">
+          Batal
+        </button>
+      </div>
+      <p id="editError" class="text-red-600 mt-2 text-sm"></p>
+    </div>
+  </div>
+
+  <script>
+    let adminToken = localStorage.getItem('adminToken') || '';
+    let editingNoteId = null;
+
+    // Check admin status on load
+    if (adminToken) {
+      document.getElementById('loginForm').classList.add('hidden');
+      document.getElementById('loggedInInfo').classList.remove('hidden');
+    }
+
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => console.log('Service Worker registered', reg))
+        .catch(err => console.error('Service Worker registration failed', err));
+    }
+
+    // Load notes on page load
+    loadNotes();
+
+    async function loadNotes() {
+      try {
+        const response = await fetch('/api/notes');
+        if (!response.ok) throw new Error('Failed to fetch notes');
+        const notes = await response.json();
+        renderNotes(notes);
+      } catch (error) {
+        console.error('Error loading notes:', error);
+        document.getElementById('loadingIndicator').innerHTML = '<p class="text-red-600">Gagal memuat catatan.</p>';
+      }
+    }
+
+    function renderNotes(notes) {
+      const container = document.getElementById('notesContainer');
+      const isAdmin = !!adminToken;
+
+      if (notes.length === 0) {
+        container.innerHTML = '<p class="col-span-full text-center text-gray-500 text-lg">Belum ada catatan. Buat yang pertama!</p>';
+        document.getElementById('loadingIndicator').classList.add('hidden');
+        return;
+      }
+
+      container.innerHTML = notes.map(note => `
+        <div class="note rounded-lg p-6 relative" style="background-color: ${note.color}">
+          <div class="note-content text-gray-800 mb-4 break-words">${escapeHtml(note.content)}</div>
+          <div class="text-xs text-gray-600 mb-2">
+            ${new Date(note.created_at).toLocaleString('id-ID')}
+          </div>
+          ${isAdmin ? `
+            <div class="flex gap-2">
+              <button onclick="openEditModal('${note.id}')" 
+                      class="flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition text-sm font-semibold">
+                Edit
+              </button>
+              <button onclick="deleteNote('${note.id}')" 
+                      class="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition text-sm font-semibold">
+                Hapus
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      document.getElementById('loadingIndicator').classList.add('hidden');
+    }
+
+    async function createNote() {
+      const content = document.getElementById('noteContent').value.trim();
+      const color = document.getElementById('noteColor').value;
+      const errorEl = document.getElementById('createError');
+
+      if (!content) {
+        errorEl.textContent = 'Konten catatan wajib diisi.';
+        return;
+      }
+
+      if (content.length > 1000) {
+        errorEl.textContent = 'Maksimum 1000 karakter.';
+        return;
+      }
+
+      errorEl.textContent = '';
+
+      try {
+        const response = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, color })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Gagal membuat catatan');
+        }
+
+        document.getElementById('noteContent').value = '';
+        document.getElementById('noteColor').value = '#FDE68A';
+        loadNotes();
+      } catch (error) {
+        errorEl.textContent = error.message;
+      }
+    }
+
+    async function adminLogin() {
+      const password = document.getElementById('adminPassword').value;
+      const errorEl = document.getElementById('loginError');
+
+      if (!password) {
+        errorEl.textContent = 'Password wajib diisi.';
+        return;
+      }
+
+      errorEl.textContent = '';
+
+      try {
+        const response = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Login gagal');
+        }
+
+        const data = await response.json();
+        adminToken = data.token;
+        localStorage.setItem('adminToken', adminToken);
+        
+        document.getElementById('loginForm').classList.add('hidden');
+        document.getElementById('loggedInInfo').classList.remove('hidden');
+        document.getElementById('adminPassword').value = '';
+        loadNotes();
+      } catch (error) {
+        errorEl.textContent = error.message;
+      }
+    }
+
+    function adminLogout() {
+      adminToken = '';
+      localStorage.removeItem('adminToken');
+      document.getElementById('loginForm').classList.remove('hidden');
+      document.getElementById('loggedInInfo').classList.add('hidden');
+      loadNotes();
+    }
+
+    function openEditModal(noteId) {
+      editingNoteId = noteId;
+      const notes = Array.from(document.querySelectorAll('.note'));
+      const noteEl = notes.find(el => el.innerHTML.includes(noteId));
+      
+      // Find the note data from the current state
+      fetch('/api/notes')
+        .then(res => res.json())
+        .then(notes => {
+          const note = notes.find(n => n.id === noteId);
+          if (note) {
+            document.getElementById('editContent').value = note.content;
+            document.getElementById('editColor').value = note.color;
+            document.getElementById('editModal').classList.remove('hidden');
+          }
+        });
+    }
+
+    function closeEditModal() {
+      editingNoteId = null;
+      document.getElementById('editModal').classList.add('hidden');
+      document.getElementById('editError').textContent = '';
+    }
+
+    async function saveEdit() {
+      const content = document.getElementById('editContent').value.trim();
+      const color = document.getElementById('editColor').value;
+      const errorEl = document.getElementById('editError');
+
+      if (!content) {
+        errorEl.textContent = 'Konten tidak boleh kosong.';
+        return;
+      }
+
+      if (content.length > 1000) {
+        errorEl.textContent = 'Maksimum 1000 karakter.';
+        return;
+      }
+
+      errorEl.textContent = '';
+
+      try {
+        const response = await fetch(`/api/notes/${editingNoteId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`
+          },
+          body: JSON.stringify({ content, color })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Gagal menyimpan perubahan');
+        }
+
+        closeEditModal();
+        loadNotes();
+      } catch (error) {
+        errorEl.textContent = error.message;
+      }
+    }
+
+    async function deleteNote(noteId) {
+      if (!confirm('Yakin ingin menghapus catatan ini?')) return;
+
+      try {
+        const response = await fetch(`/api/notes/${noteId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${adminToken}`
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Gagal menghapus catatan');
+        }
+
+        loadNotes();
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
