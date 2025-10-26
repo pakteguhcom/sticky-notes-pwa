@@ -147,11 +147,14 @@ app.post('/api/admin/login', (req, res) => {
   res.json({ token });
 });
 
-// Serve static files from public directory
-app.use(express.static(join(__dirname, '..', 'public')));
+// Serve static files from public directory with cache headers
+app.use(express.static(join(__dirname, '..', 'public'), {
+  maxAge: '1d',
+  etag: true
+}));
 
 // Catch-all route for SPA (serve index.html for all non-API routes)
-app.get('*', (req, res) => {
+app.get(/^(?!\/api\/).*/, (req, res) => {
   res.sendFile(join(__dirname, '..', 'public', 'index.html'));
 });
 
