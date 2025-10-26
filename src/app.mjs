@@ -61,6 +61,14 @@ const createNoteLimiter = rateLimit({
   message: { error: 'Terlalu banyak request. Coba lagi nanti.' }
 });
 
+const adminLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak request. Coba lagi nanti.' }
+});
+
 function adminAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -100,7 +108,7 @@ app.post('/api/notes', createNoteLimiter, async (req, res) => {
   res.status(201).json({ id, content: trimmed, color: col, created_at });
 });
 
-app.put('/api/notes/:id', adminAuth, async (req, res) => {
+app.put('/api/notes/:id', adminLimiter, adminAuth, async (req, res) => {
   const { id } = req.params;
   const { content, color } = req.body || {};
   const fields = [];
@@ -131,7 +139,7 @@ app.put('/api/notes/:id', adminAuth, async (req, res) => {
   res.json(got.rows[0]);
 });
 
-app.delete('/api/notes/:id', adminAuth, async (req, res) => {
+app.delete('/api/notes/:id', adminLimiter, adminAuth, async (req, res) => {
   const { id } = req.params;
   const result = await db.execute({ sql: `DELETE FROM notes WHERE id = ?`, args: [id] });
   if (!result.rowsAffected) return res.status(404).json({ error: 'Catatan tidak ditemukan.' });
